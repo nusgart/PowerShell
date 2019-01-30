@@ -11,9 +11,8 @@ using System.Diagnostics.CodeAnalysis;
 namespace Microsoft.PowerShell.Commands
 {
     /// <summary>
-    /// The implementation of the "get-alias" cmdlet
+    /// The implementation of the "get-alias" cmdlet.
     /// </summary>
-    ///
     [Cmdlet(VerbsCommon.Get, "Alias", DefaultParameterSetName = "Default", HelpUri = "https://go.microsoft.com/fwlink/?LinkID=113306")]
     [OutputType(typeof(AliasInfo))]
     public class GetAliasCommand : PSCmdlet
@@ -21,35 +20,36 @@ namespace Microsoft.PowerShell.Commands
         #region Parameters
 
         /// <summary>
-        /// The Name parameter for the command
+        /// The Name parameter for the command.
         /// </summary>
-        ///
         [Parameter(ParameterSetName = "Default", Position = 0, ValueFromPipeline = true, ValueFromPipelineByPropertyName = true)]
         [ValidateNotNullOrEmpty()]
         public string[] Name
         {
             get { return _names; }
+
             set { _names = value ?? new string[] { "*" }; }
         }
+
         private string[] _names = new string[] { "*" };
 
         /// <summary>
-        /// The Exclude parameter for the command
+        /// The Exclude parameter for the command.
         /// </summary>
-        ///
         [Parameter]
         public string[] Exclude
         {
             get { return _excludes; }
+
             set { _excludes = value ?? new string[0]; }
         }
+
         private string[] _excludes = new string[0];
 
         /// <summary>
         /// The scope parameter for the command determines
         /// which scope the aliases are retrieved from.
         /// </summary>
-        ///
         [Parameter]
         public string Scope { get; set; }
 
@@ -59,7 +59,7 @@ namespace Microsoft.PowerShell.Commands
         [Parameter(ParameterSetName = "Definition")]
         [ValidateNotNullOrEmpty]
         [SuppressMessage("Microsoft.Performance", "CA1819:PropertiesShouldNotReturnArrays")]
-        public String[] Definition { get; set; }
+        public string[] Definition { get; set; }
 
         #endregion Parameters
 
@@ -68,7 +68,6 @@ namespace Microsoft.PowerShell.Commands
         /// <summary>
         /// The main processing loop of the command.
         /// </summary>
-        ///
         protected override void ProcessRecord()
         {
             if (ParameterSetName.Equals("Definition"))
@@ -84,8 +83,8 @@ namespace Microsoft.PowerShell.Commands
                 {
                     WriteMatches(aliasName, "Default");
                 }
-            }//parameterset else
-        } // ProcessRecord
+            }
+        }
         #endregion Command code
 
         private void WriteMatches(string value, string parametersetname)
@@ -93,10 +92,10 @@ namespace Microsoft.PowerShell.Commands
             // First get the alias table (from the proper scope if necessary)
             IDictionary<string, AliasInfo> aliasTable = null;
 
-            //get the command origin
+            // get the command origin
             CommandOrigin origin = MyInvocation.CommandOrigin;
             string displayString = "name";
-            if (!String.IsNullOrEmpty(Scope))
+            if (!string.IsNullOrEmpty(Scope))
             {
                 // This can throw PSArgumentException and PSArgumentOutOfRangeException
                 // but just let them go as this is terminal for the pipeline and the
@@ -129,6 +128,7 @@ namespace Microsoft.PowerShell.Commands
                     {
                         continue;
                     }
+
                     if (SessionStateUtilities.MatchesAnyWildcardPattern(tableEntry.Value.Definition, excludePatterns, false))
                     {
                         continue;
@@ -140,12 +140,13 @@ namespace Microsoft.PowerShell.Commands
                     {
                         continue;
                     }
-                    //excludes pattern
+                    // excludes pattern
                     if (SessionStateUtilities.MatchesAnyWildcardPattern(tableEntry.Key, excludePatterns, false))
                     {
                         continue;
                     }
                 }
+
                 if (ContainsWildcard)
                 {
                     // Only write the command if it is visible to the requestor
@@ -199,6 +200,5 @@ namespace Microsoft.PowerShell.Commands
                 WriteError(er);
             }
         }
-    } // class GetAliasCommand
-}//Microsoft.PowerShell.Commands
-
+    }
+}

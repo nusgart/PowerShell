@@ -8,9 +8,8 @@ using System.Management.Automation.Internal;
 namespace Microsoft.PowerShell.Commands
 {
     /// <summary>
-    /// The implementation of the "set-alias" cmdlet
+    /// The implementation of the "set-alias" cmdlet.
     /// </summary>
-    ///
     [Cmdlet(VerbsCommon.Set, "Alias", SupportsShouldProcess = true, HelpUri = "https://go.microsoft.com/fwlink/?LinkID=113390")]
     [OutputType(typeof(AliasInfo))]
     public class SetAliasCommand : WriteAliasCommandBase
@@ -20,7 +19,6 @@ namespace Microsoft.PowerShell.Commands
         /// <summary>
         /// The main processing loop of the command.
         /// </summary>
-        ///
         protected override void ProcessRecord()
         {
             // Create the alias info
@@ -47,7 +45,7 @@ namespace Microsoft.PowerShell.Commands
 
                 try
                 {
-                    if (String.IsNullOrEmpty(Scope))
+                    if (string.IsNullOrEmpty(Scope))
                     {
                         result = SessionState.Internal.SetAliasItem(aliasToSet, Force, MyInvocation.CommandOrigin);
                     }
@@ -72,8 +70,7 @@ namespace Microsoft.PowerShell.Commands
                     WriteObject(result);
                 }
             }
-        } // ProcessRecord
+        }
         #endregion Command code
-    } // class SetAliasCommand
-}//Microsoft.PowerShell.Commands
-
+    }
+}

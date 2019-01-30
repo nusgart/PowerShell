@@ -38,7 +38,7 @@ namespace Microsoft.PowerShell.Commands
         private const string ParameterSet_AvailableInCimSession = "CimSession";
 
         /// <summary>
-        /// This parameter specifies the current pipeline object
+        /// This parameter specifies the current pipeline object.
         /// </summary>
         [Parameter(ParameterSetName = ParameterSet_Loaded, ValueFromPipeline = true, Position = 0)]
         [Parameter(ParameterSetName = ParameterSet_AvailableLocally, ValueFromPipeline = true, Position = 0)]
@@ -50,7 +50,7 @@ namespace Microsoft.PowerShell.Commands
         public string[] Name { get; set; }
 
         /// <summary>
-        /// This parameter specifies the current pipeline object
+        /// This parameter specifies the current pipeline object.
         /// </summary>
         [Parameter(ParameterSetName = ParameterSet_Loaded, ValueFromPipelineByPropertyName = true)]
         [Parameter(ParameterSetName = ParameterSet_AvailableLocally, ValueFromPipelineByPropertyName = true)]
@@ -85,7 +85,20 @@ namespace Microsoft.PowerShell.Commands
         public string PSEdition { get; set; }
 
         /// <summary>
-        /// If specified, then Get-Module refreshes the internal cmdlet analysis cache
+        /// When set, CompatiblePSEditions checking is disabled for modules in the System32 (Windows PowerShell) module directory.
+        /// </summary>
+        [Parameter(ParameterSetName = ParameterSet_AvailableLocally)]
+        [Parameter(ParameterSetName = ParameterSet_AvailableInPsrpSession)]
+        [Parameter(ParameterSetName = ParameterSet_AvailableInCimSession)]
+        public SwitchParameter SkipEditionCheck
+        {
+            get { return (SwitchParameter)BaseSkipEditionCheck; }
+
+            set { BaseSkipEditionCheck = value; }
+        }
+
+        /// <summary>
+        /// If specified, then Get-Module refreshes the internal cmdlet analysis cache.
         /// </summary>
         [Parameter(ParameterSetName = ParameterSet_AvailableLocally)]
         [Parameter(ParameterSetName = ParameterSet_AvailableInPsrpSession)]
@@ -93,28 +106,28 @@ namespace Microsoft.PowerShell.Commands
         public SwitchParameter Refresh { get; set; }
 
         /// <summary>
-        /// If specified, then Get-Module will attempt to discover PowerShell modules on a remote computer using the specified session
+        /// If specified, then Get-Module will attempt to discover PowerShell modules on a remote computer using the specified session.
         /// </summary>
         [Parameter(ParameterSetName = ParameterSet_AvailableInPsrpSession, Mandatory = true)]
         [ValidateNotNull]
         public PSSession PSSession { get; set; }
 
         /// <summary>
-        /// If specified, then Get-Module will attempt to discover PS-CIM modules on a remote computer using the specified session
+        /// If specified, then Get-Module will attempt to discover PS-CIM modules on a remote computer using the specified session.
         /// </summary>
         [Parameter(ParameterSetName = ParameterSet_AvailableInCimSession, Mandatory = true)]
         [ValidateNotNull]
         public CimSession CimSession { get; set; }
 
         /// <summary>
-        /// For interoperability with 3rd party CIM servers, user can specify custom resource URI
+        /// For interoperability with 3rd party CIM servers, user can specify custom resource URI.
         /// </summary>
         [Parameter(ParameterSetName = ParameterSet_AvailableInCimSession, Mandatory = false)]
         [ValidateNotNull]
         public Uri CimResourceUri { get; set; }
 
         /// <summary>
-        /// For interoperability with 3rd party CIM servers, user can specify custom namespace
+        /// For interoperability with 3rd party CIM servers, user can specify custom namespace.
         /// </summary>
         [Parameter(ParameterSetName = ParameterSet_AvailableInCimSession, Mandatory = false)]
         [ValidateNotNullOrEmpty]
@@ -208,7 +221,7 @@ namespace Microsoft.PowerShell.Commands
                     ImportModuleOptions throwAwayOptions = new ImportModuleOptions();
                     moduleInfo = LoadModuleManifest(
                         temporaryModuleManifestPath,
-                        null, //scriptInfo
+                        null, // scriptInfo
                         mainData,
                         localizedData,
                         0 /* - don't write errors, don't load elements, don't return null on first error */,
@@ -282,7 +295,7 @@ namespace Microsoft.PowerShell.Commands
         #region IDisposable Members
 
         /// <summary>
-        /// Releases resources associated with this object
+        /// Releases resources associated with this object.
         /// </summary>
         public void Dispose()
         {
@@ -291,7 +304,7 @@ namespace Microsoft.PowerShell.Commands
         }
 
         /// <summary>
-        /// Releases resources associated with this object
+        /// Releases resources associated with this object.
         /// </summary>
         private void Dispose(bool disposing)
         {
@@ -341,6 +354,18 @@ namespace Microsoft.PowerShell.Commands
                 ThrowTerminatingError(error);
             }
 
+            // -SkipEditionCheck only makes sense for -ListAvailable (otherwise the module is already loaded)
+            if (SkipEditionCheck && !ListAvailable)
+            {
+                ErrorRecord error = new ErrorRecord(
+                    new InvalidOperationException(Modules.SkipEditionCheckNotSupportedWithoutListAvailable),
+                    nameof(Modules.SkipEditionCheckNotSupportedWithoutListAvailable),
+                    ErrorCategory.InvalidOperation,
+                    targetObject: null);
+
+                ThrowTerminatingError(error);
+            }
+
             var strNames = new List<string>();
             if (Name != null)
             {
@@ -350,6 +375,10 @@ namespace Microsoft.PowerShell.Commands
             var moduleSpecTable = new Dictionary<string, ModuleSpecification>(StringComparer.OrdinalIgnoreCase);
             if (FullyQualifiedName != null)
             {
+                // TODO:
+                // FullyQualifiedName.Name could be a path, in which case it will not match module.Name.
+                // This is potentially a bug (since version checks are ignored).
+                // We should normalize FullyQualifiedName.Name here with ModuleIntrinsics.NormalizeModuleName().
                 moduleSpecTable = FullyQualifiedName.ToDictionary(moduleSpecification => moduleSpecification.Name, StringComparer.OrdinalIgnoreCase);
                 strNames.AddRange(FullyQualifiedName.Select(spec => spec.Name));
             }
@@ -423,27 +452,12 @@ namespace Microsoft.PowerShell.Commands
             }
         }
 
-        /// <summary>
-        /// Determine whether a module info matches a given module specification table and specified PSEdition value.
-        /// </summary>
-        /// <param name="moduleInfo"></param>
-        /// <param name="moduleSpecTable"></param>
-        /// <param name="edition"></param>
-        /// <returns></returns>
-        private static bool ModuleMatch(PSModuleInfo moduleInfo, IDictionary<string, ModuleSpecification> moduleSpecTable, string edition)
-        {
-            ModuleSpecification moduleSpecification;
-            return (String.IsNullOrEmpty(edition) || moduleInfo.CompatiblePSEditions.Contains(edition, StringComparer.OrdinalIgnoreCase)) &&
-                   (!moduleSpecTable.TryGetValue(moduleInfo.Name, out moduleSpecification) || ModuleIntrinsics.IsModuleMatchingModuleSpec(moduleInfo, moduleSpecification));
-        }
-
         private void GetAvailableViaCimSession(IEnumerable<string> names, IDictionary<string, ModuleSpecification> moduleSpecTable,
                                                CimSession cimSession, Uri resourceUri, string cimNamespace)
         {
-            var remoteModules = GetAvailableViaCimSessionCore(names, cimSession, resourceUri, cimNamespace);
+            IEnumerable<PSModuleInfo> remoteModules = GetAvailableViaCimSessionCore(names, cimSession, resourceUri, cimNamespace);
 
-            foreach (var remoteModule in remoteModules.Where(remoteModule => ModuleMatch(remoteModule, moduleSpecTable, PSEdition))
-                )
+            foreach (PSModuleInfo remoteModule in FilterModulesForEditionAndSpecification(remoteModules, moduleSpecTable))
             {
                 RemoteDiscoveryHelper.AssociatePSModuleInfoWithSession(remoteModule, cimSession, resourceUri,
                                                                        cimNamespace);
@@ -453,10 +467,9 @@ namespace Microsoft.PowerShell.Commands
 
         private void GetAvailableViaPsrpSession(string[] names, IDictionary<string, ModuleSpecification> moduleSpecTable, PSSession session)
         {
-            var remoteModules = GetAvailableViaPsrpSessionCore(names, session.Runspace);
+            IEnumerable<PSModuleInfo> remoteModules = GetAvailableViaPsrpSessionCore(names, session.Runspace);
 
-            foreach (var remoteModule in remoteModules.Where(remoteModule => ModuleMatch(remoteModule, moduleSpecTable, PSEdition))
-                )
+            foreach (PSModuleInfo remoteModule in FilterModulesForEditionAndSpecification(remoteModules, moduleSpecTable))
             {
                 RemoteDiscoveryHelper.AssociatePSModuleInfoWithSession(remoteModule, session);
                 this.WriteObject(remoteModule);
@@ -465,14 +478,10 @@ namespace Microsoft.PowerShell.Commands
 
         private void GetAvailableLocallyModules(string[] names, IDictionary<string, ModuleSpecification> moduleSpecTable, bool all)
         {
-            var refresh = Refresh.IsPresent;
-            var modules = GetModule(names, all, refresh);
-
-            foreach (
-                var psModule in
-                    modules.Where(module => ModuleMatch(module, moduleSpecTable, PSEdition)).Select(module => new PSObject(module))
-                )
+            IEnumerable<PSModuleInfo> modules = GetModule(names, all, Refresh);
+            foreach (PSModuleInfo module in FilterModulesForEditionAndSpecification(modules, moduleSpecTable))
             {
+                var psModule = new PSObject(module);
                 psModule.TypeNames.Insert(0, "ModuleInfoGrouping");
                 WriteObject(psModule);
             }
@@ -482,12 +491,77 @@ namespace Microsoft.PowerShell.Commands
         {
             var modulesToWrite = Context.Modules.GetModules(names, all);
 
-            foreach (
-                var moduleInfo in
-                    modulesToWrite.Where(moduleInfo => ModuleMatch(moduleInfo, moduleSpecTable, PSEdition))
-                )
+            foreach (PSModuleInfo moduleInfo in FilterModulesForEditionAndSpecification(modulesToWrite, moduleSpecTable))
             {
                 WriteObject(moduleInfo);
+            }
+        }
+
+        /// <summary>
+        /// Filter an enumeration of PowerShell modules based on the required PowerShell edition
+        /// and the module specification constraints set for each module (if any).
+        /// </summary>
+        /// <param name="modules">The modules to filter through.</param>
+        /// <param name="moduleSpecificationTable">Module constraints, keyed by module name, to filter modules of that name by.</param>
+        /// <returns>All modules from the original input that meet both any module edition and module specification constraints provided.</returns>
+        private IEnumerable<PSModuleInfo> FilterModulesForEditionAndSpecification(
+            IEnumerable<PSModuleInfo> modules,
+            IDictionary<string, ModuleSpecification> moduleSpecificationTable)
+        {
+#if !UNIX
+            // Edition check only applies to Windows System32 module path
+            if (!SkipEditionCheck && ListAvailable && !All)
+            {
+                modules = modules.Where(module => module.IsConsideredEditionCompatible);
+            }
+#endif
+
+            if (!string.IsNullOrEmpty(PSEdition))
+            {
+                modules = modules.Where(module => module.CompatiblePSEditions.Contains(PSEdition, StringComparer.OrdinalIgnoreCase));
+            }
+
+            if (moduleSpecificationTable != null && moduleSpecificationTable.Count > 0)
+            {
+                modules = FilterModulesForSpecificationMatch(modules, moduleSpecificationTable);
+            }
+
+            return modules;
+        }
+
+        /// <summary>
+        /// Take an enumeration of modules and only return those that match a specification
+        /// in the given specification table, or have no corresponding entry in the specification table.
+        /// </summary>
+        /// <param name="modules">The modules to filter by specification match.</param>
+        /// <param name="moduleSpecificationTable">The specification lookup table to filter the modules on.</param>
+        /// <returns>The modules that match their corresponding table entry, or which have no table entry.</returns>
+        private static IEnumerable<PSModuleInfo> FilterModulesForSpecificationMatch(
+            IEnumerable<PSModuleInfo> modules,
+            IDictionary<string, ModuleSpecification> moduleSpecificationTable)
+        {
+            Dbg.Assert(moduleSpecificationTable != null, $"Caller to verify that {nameof(moduleSpecificationTable)} is not null");
+            Dbg.Assert(moduleSpecificationTable.Count != 0, $"Caller to verify that {nameof(moduleSpecificationTable)} is not empty");
+
+            foreach (PSModuleInfo module in modules)
+            {
+                // TODO:
+                // moduleSpecification.Name may be a path and will not match module.Name when they refer to the same module.
+                // This actually causes the module to be returned always, so other specification checks are skipped erroneously.
+                // Instead we need to be able to look up or match modules by path as well (e.g. a new comparer for PSModuleInfo).
+
+                // No table entry means we return the module
+                if (!moduleSpecificationTable.TryGetValue(module.Name, out ModuleSpecification moduleSpecification))
+                {
+                    yield return module;
+                    continue;
+                }
+
+                // Modules with table entries only get returned if they match them
+                if (ModuleIntrinsics.IsModuleMatchingModuleSpec(module, moduleSpecification))
+                {
+                    yield return module;
+                }
             }
         }
     }
@@ -498,7 +572,7 @@ namespace Microsoft.PowerShell.Commands
     public class PSEditionArgumentCompleter : IArgumentCompleter
     {
         /// <summary>
-        /// CompleteArgument
+        /// CompleteArgument.
         /// </summary>
         public IEnumerable<CompletionResult> CompleteArgument(string commandName, string parameterName, string wordToComplete, CommandAst commandAst, IDictionary fakeBoundParameters)
         {
@@ -513,5 +587,4 @@ namespace Microsoft.PowerShell.Commands
             }
         }
     }
-} // Microsoft.PowerShell.Commands
-
+}

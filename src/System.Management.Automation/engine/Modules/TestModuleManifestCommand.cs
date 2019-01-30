@@ -24,18 +24,33 @@ namespace Microsoft.PowerShell.Commands
     public sealed class TestModuleManifestCommand : ModuleCmdletBase
     {
         /// <summary>
+        /// Creates an instance of the Test-ModuleManifest command.
+        /// </summary>
+        public TestModuleManifestCommand()
+        {
+            // Test-ModuleManifest reads a manifest with ModuleCmdletBase.LoadModuleManifest().
+            // This will error on an edition-incompatible manifest loaded from the System32 path,
+            // unless BaseSkipEditionCheck is true. Since Test-ModuleManifest shouldn't care about
+            // module edition (it just tests manifest validity), we always want to set this rather
+            // than provide it as a switch on the cmdlet.
+            BaseSkipEditionCheck = true;
+        }
+
+        /// <summary>
         /// The output path for the generated file...
         /// </summary>
         [Parameter(Mandatory = true, ValueFromPipeline = true, Position = 0, ValueFromPipelineByPropertyName = true)]
         public string Path
         {
             get { return _path; }
+
             set { _path = value; }
         }
+
         private string _path;
 
         /// <summary>
-        /// Implements the record processing for this cmdlet
+        /// Implements the record processing for this cmdlet.
         /// </summary>
         protected override void ProcessRecord()
         {
@@ -115,7 +130,7 @@ namespace Microsoft.PowerShell.Commands
 
                     if (module != null)
                     {
-                        //Validate file existence
+                        // Validate file existence
                         if (module.RequiredAssemblies != null)
                         {
                             foreach (string requiredAssembliespath in module.RequiredAssemblies)
@@ -130,8 +145,8 @@ namespace Microsoft.PowerShell.Commands
                             }
                         }
 
-                        //RootModule can be null, empty string or point to a valid .psm1, , .cdxml, .xaml or .dll.  Anything else is invalid.
-                        if (module.RootModule != null && module.RootModule != "")
+                        // RootModule can be null, empty string or point to a valid .psm1, , .cdxml, .xaml or .dll.  Anything else is invalid.
+                        if (module.RootModule != null && module.RootModule != string.Empty)
                         {
                             string rootModuleExt = System.IO.Path.GetExtension(module.RootModule);
                             if ((!IsValidFilePath(module.RootModule, module, true) && !IsValidGacAssembly(module.RootModule)) ||
@@ -245,6 +260,7 @@ namespace Microsoft.PowerShell.Commands
                 {
                     Context.ModuleBeingProcessed = _origModuleBeingProcessed;
                 }
+
                 DirectoryInfo parent = null;
                 try
                 {
@@ -311,6 +327,7 @@ namespace Microsoft.PowerShell.Commands
                     ErrorRecord er = new ErrorRecord(ioe, "Modules_InvalidModuleManifestPath", ErrorCategory.InvalidArgument, path);
                     ThrowTerminatingError(er);
                 }
+
                 path = pathInfos[0].Path;
 
                 // First, we validate if the path does exist.
@@ -319,7 +336,7 @@ namespace Microsoft.PowerShell.Commands
                     return false;
                 }
 
-                //Then, we validate if the path is under module scope
+                // Then, we validate if the path is under module scope
                 if (verifyPathScope && !System.IO.Path.GetFullPath(path).StartsWith(System.IO.Path.GetFullPath(module.ModuleBase), StringComparison.OrdinalIgnoreCase))
                 {
                     return false;
@@ -354,6 +371,7 @@ namespace Microsoft.PowerShell.Commands
                 assemblyFile = assemblyName + StringLiterals.PowerShellILAssemblyExtension;
                 ngenAssemblyFile = assemblyName + StringLiterals.PowerShellNgenAssemblyExtension;
             }
+
             try
             {
                 var allFiles = Directory.GetFiles(gacPath, assemblyFile, SearchOption.AllDirectories);
@@ -378,4 +396,4 @@ namespace Microsoft.PowerShell.Commands
     }
 
     #endregion
-} // Microsoft.PowerShell.Commands
+}

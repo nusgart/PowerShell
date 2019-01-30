@@ -1,5 +1,8 @@
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License.
+
+Import-Module HelpersCommon
+
 function Clean-State
 {
     if (Test-Path $FullyQualifiedLink)
@@ -12,6 +15,16 @@ function Clean-State
         Remove-Item $FullyQualifiedFile -Force
     }
 
+    if ($FullyQualifiedFileInFolder -and (Test-Path $FullyQualifiedFileInFolder))
+    {
+        Remove-Item $FullyQualifiedFileInFolder -Force
+    }
+
+    if ($FullyQualifiedSubFolder -and (Test-Path $FullyQualifiedSubFolder))
+    {
+        Remove-Item $FullyQualifiedSubFolder -Force
+    }
+
     if (Test-Path $FullyQualifiedFolder)
     {
         Remove-Item $FullyQualifiedFolder -Force
@@ -19,13 +32,17 @@ function Clean-State
 }
 
 Describe "New-Item" -Tags "CI" {
-    $tmpDirectory         = $TestDrive
-    $testfile             = "testfile.txt"
-    $testfolder           = "newDirectory"
-    $testlink             = "testlink"
-    $FullyQualifiedFile   = Join-Path -Path $tmpDirectory -ChildPath $testfile
-    $FullyQualifiedFolder = Join-Path -Path $tmpDirectory -ChildPath $testfolder
-    $FullyQualifiedLink   = Join-Path -Path $tmpDirectory -ChildPath $testlink
+    $tmpDirectory               = $TestDrive
+    $testfile                   = "testfile.txt"
+    $testfolder                 = "newDirectory"
+    $testsubfolder              = "newSubDirectory"
+    $testlink                   = "testlink"
+    $FullyQualifiedFile         = Join-Path -Path $tmpDirectory -ChildPath $testfile
+    $FullyQualifiedFolder       = Join-Path -Path $tmpDirectory -ChildPath $testfolder
+    $FullyQualifiedLink         = Join-Path -Path $tmpDirectory -ChildPath $testlink
+    $FullyQualifiedSubFolder    = Join-Path -Path $FullyQualifiedFolder -ChildPath $testsubfolder
+    $FullyQualifiedFileInFolder = Join-Path -Path $FullyQualifiedFolder -ChildPath $testfile
+
 
     BeforeEach {
         Clean-State
@@ -144,6 +161,30 @@ Describe "New-Item" -Tags "CI" {
             Pop-Location
         }
     }
+
+    It "Should create a file in the current directory when using Drive: notation" {
+        try {
+            New-Item -Name $testfolder -Path "TestDrive:\" -ItemType directory > $null
+            Push-Location -Path "TestDrive:\$testfolder"
+            New-Item -Name $testfile -Path "TestDrive:" -ItemType file > $null
+            $FullyQualifiedFileInFolder | Should -Exist
+        }
+        finally {
+            Pop-Location
+        }
+    }
+
+    It "Should create a folder in the current directory when using Drive: notation" {
+        try {
+            New-Item -Name $testfolder -Path "TestDrive:\" -ItemType directory > $null
+            Push-Location -Path "TestDrive:\$testfolder"
+            New-Item -Name $testsubfolder -Path "TestDrive:" -ItemType file > $null
+            $FullyQualifiedSubFolder | Should -Exist
+        }
+        finally {
+            Pop-Location
+        }
+    }
 }
 
 # More precisely these tests require SeCreateSymbolicLinkPrivilege.
@@ -204,18 +245,40 @@ Describe "New-Item with links" -Tags @('CI', 'RequireAdminOnWindows') {
 
         # Remove the link explicitly to avoid broken symlink issue
         Remove-Item $FullyQualifiedLink -Force
-    }
-
-    It "Should error correctly when failing to create a symbolic link" -Skip:($IsWindows -or $IsElevated) {
-        Write-Host "Iselevated: $IsElevated"
-        # This test expects that /sbin exists but is not writable by the user
-        { New-Item -ItemType SymbolicLink -Path "/sbin/powershell-test" -Target $FullyQualifiedFolder -ErrorAction Stop } |
-		Should -Throw -ErrorId "NewItemSymbolicLinkElevationRequired,Microsoft.PowerShell.Commands.NewItemCommand"
+        # Test a code path removing a symbolic link (reparse point)
+        Test-Path $FullyQualifiedLink | Should -BeFalse
     }
 
     It "New-Item -ItemType SymbolicLink should understand directory path ending with slash" {
         $folderName = [System.IO.Path]::GetRandomFileName()
         $symbolicLinkPath = New-Item -ItemType SymbolicLink -Path "$tmpDirectory/$folderName/" -Value "/bar/"
         $symbolicLinkPath | Should -Not -BeNullOrEmpty
+    }
+}
+
+Describe "New-Item with links fails for non elevated user if developer mode not enabled on Windows." -Tags "CI" {
+    BeforeAll {
+        $testfile             = "testfile.txt"
+        $testlink             = "testlink"
+        $FullyQualifiedFile   = Join-Path -Path $TestDrive -ChildPath $testfile
+        $TestFilePath         = Join-Path -Path $TestDrive -ChildPath $testlink
+        $developerModeEnabled = (Get-ItemProperty HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock -ErrorAction SilentlyContinue).AllowDevelopmentWithoutDevLicense -eq 1
+        $minBuildRequired     = [System.Environment]::OSVersion.Version -ge "10.0.14972"
+        $developerMode = $developerModeEnabled -and $minBuildRequired
+    }
+
+    AfterEach {
+        Remove-Item -Path $testFilePath -Force -ErrorAction SilentlyContinue
+    }
+
+    It "Should error correctly when failing to create a symbolic link and not in developer mode" -Skip:(!$IsWindows -or $developerMode -or (Test-IsElevated)) {
+        { New-Item -ItemType SymbolicLink -Path $TestFilePath -Target $FullyQualifiedFile -ErrorAction Stop } |
+        Should -Throw -ErrorId "NewItemSymbolicLinkElevationRequired,Microsoft.PowerShell.Commands.NewItemCommand"
+        $TestFilePath | Should -Not -Exist
+    }
+
+    It "Should succeed to create a symbolic link without elevation and in developer mode" -Skip:(!$IsWindows -or !$developerMode -or (Test-IsElevated)) {
+        { New-Item -ItemType SymbolicLink -Path $TestFilePath -Target $FullyQualifiedFile -ErrorAction Stop } | Should -Not -Throw
+        $TestFilePath | Should -Exist
     }
 }

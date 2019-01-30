@@ -24,9 +24,8 @@ namespace System.Management.Automation
         internal ExecutionContext Context { get; }
 
         /// <summary>
-        /// Gets the CommandDiscovery instance for the current engine
+        /// Gets the CommandDiscovery instance for the current engine.
         /// </summary>
-        ///
         internal CommandDiscovery CommandDiscovery { get; }
 
         /// <summary>
@@ -55,14 +54,14 @@ namespace System.Management.Automation
             var ast = Parser.ScanString(s);
 
             // ExpandString is assumed to invoke code, so passing 'IsTrustedInput'
-            return Compiler.GetExpressionValue(ast, true, Context, Context.EngineSessionState) as string ?? "";
+            return Compiler.GetExpressionValue(ast, true, Context, Context.EngineSessionState) as string ?? string.Empty;
         }
 
         /// <summary>
         /// Compile a piece of text into a parse tree for later execution.
         /// </summary>
-        /// <param name="script">The text to parse</param>
-        /// <param name="addToHistory">true iff the scriptblock will be added to history</param>
+        /// <param name="script">The text to parse.</param>
+        /// <param name="addToHistory">True iff the scriptblock will be added to history.</param>
         /// <returns>The parse text as a parsetree node.</returns>
         internal ScriptBlock ParseScriptBlock(string script, bool addToHistory)
         {
@@ -85,6 +84,7 @@ namespace System.Management.Automation
                 {
                     throw new IncompleteParseException(errors[0].Message, errors[0].ErrorId);
                 }
+
                 throw new ParseException(errors);
             }
 

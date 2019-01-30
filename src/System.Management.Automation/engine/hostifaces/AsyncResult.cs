@@ -8,7 +8,7 @@ namespace System.Management.Automation.Runspaces
 {
     /// <summary>
     /// Base class for AsyncResult objects that are returned by various
-    /// Async operations supported by RunspacePool , PowerShell types
+    /// Async operations supported by RunspacePool , PowerShell types.
     /// </summary>
     internal class AsyncResult : IAsyncResult
     {
@@ -28,7 +28,7 @@ namespace System.Management.Automation.Runspaces
         #region Constructor
 
         /// <summary>
-        /// Constructor
+        /// Constructor.
         /// </summary>
         /// <param name="ownerId">
         /// Instance Id of the object creating this instance
@@ -52,7 +52,7 @@ namespace System.Management.Automation.Runspaces
         #region IAsync Overrides
 
         /// <summary>
-        /// This always returns false
+        /// This always returns false.
         /// </summary>
         public bool CompletedSynchronously
         {
@@ -80,11 +80,11 @@ namespace System.Management.Automation.Runspaces
         {
             get
             {
-                if (null == _completedWaitHandle)
+                if (_completedWaitHandle == null)
                 {
                     lock (SyncObject)
                     {
-                        if (null == _completedWaitHandle)
+                        if (_completedWaitHandle == null)
                         {
                             _completedWaitHandle = new ManualResetEvent(IsCompleted);
                         }
@@ -116,7 +116,7 @@ namespace System.Management.Automation.Runspaces
         internal AsyncCallback Callback { get; }
 
         /// <summary>
-        /// SyncObject
+        /// SyncObject.
         /// </summary>
         internal object SyncObject { get; } = new object();
 
@@ -128,7 +128,7 @@ namespace System.Management.Automation.Runspaces
         /// </param>
         internal void SetAsCompleted(Exception exception)
         {
-            //Dbg.Assert(!isCompleted, "AsynResult already completed");
+            // Dbg.Assert(!isCompleted, "AsynResult already completed");
             if (IsCompleted)
             {
                 return;
@@ -151,7 +151,7 @@ namespace System.Management.Automation.Runspaces
             }
 
             // call the user supplied callback
-            if (null != Callback)
+            if (Callback != null)
             {
                 Callback(this);
             }
@@ -180,7 +180,7 @@ namespace System.Management.Automation.Runspaces
         {
             lock (SyncObject)
             {
-                if (null != _completedWaitHandle)
+                if (_completedWaitHandle != null)
                 {
                     _completedWaitHandle.Set();
                 }
@@ -225,7 +225,7 @@ namespace System.Management.Automation.Runspaces
             _invokeOnThreadEvent = null;  // Allow early GC
 
             // Operation is done: if an exception occured, throw it
-            if (null != Exception)
+            if (Exception != null)
             {
                 throw Exception;
             }
@@ -234,8 +234,8 @@ namespace System.Management.Automation.Runspaces
         /// <summary>
         /// Use blocked thread to invoke callback delegate.
         /// </summary>
-        /// <param name="callback">Callback delegate</param>
-        /// <param name="state">Callback state</param>
+        /// <param name="callback">Callback delegate.</param>
+        /// <param name="state">Callback state.</param>
         internal bool InvokeCallbackOnThread(WaitCallback callback, object state)
         {
             if (callback == null)

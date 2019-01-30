@@ -1,7 +1,7 @@
 Debugging in PowerShell Command-line
 =====
 
-As we know, we can debug PowerShell code via GUI tools like [Visual Studio Code](./using-vscode.md#debugging-with-vs-code). In addition, we can directly perform debugging within the PowerShell command-line session by using the PowerShell debugger cmdlets. This document demonstrates how to use the cmdlets for the PowerShell command-line debugging. We will cover the following topics: setting a debug breakpoint on a line of code and on a variable.
+As we know, we can debug PowerShell code via GUI tools like [Visual Studio Code](https://docs.microsoft.com/en-us/powershell/scripting/components/vscode/using-vscode?view=powershell-6#debugging-with-visual-studio-code). In addition, we can directly perform debugging within the PowerShell command-line session by using the PowerShell debugger cmdlets. This document demonstrates how to use the cmdlets for the PowerShell command-line debugging. We will cover the following topics: setting a debug breakpoint on a line of code and on a variable.
 
 Let's use the following code snippet as our sample script.
 
@@ -170,5 +170,5 @@ Now you know the basics of the PowerShell debugging from PowerShell command-line
 
 More Reading
 =====
-- [about_Debuggers](https://technet.microsoft.com/en-us/library/hh847790.aspx)
+- [about_Debuggers](https://docs.microsoft.com/powershell/module/microsoft.powershell.core/about/about_debuggers?view=powershell-6)
 - [PowerShell Debugging](https://blogs.technet.microsoft.com/heyscriptingguy/tag/debugging/)

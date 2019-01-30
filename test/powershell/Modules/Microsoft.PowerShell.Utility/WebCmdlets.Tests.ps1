@@ -345,7 +345,7 @@ function GetMultipartBody {
 <#
     Defines the list of redirect codes to test as well as the
     expected Method when the redirection is handled.
-    See https://msdn.microsoft.com/en-us/library/windows/apps/system.net.httpstatuscode(v=vs.105).aspx
+    See https://docs.microsoft.com/previous-versions/windows/apps/f92ssyy1(v=vs.105)
     for additonal details.
 #>
 $redirectTests = @(
@@ -367,7 +367,7 @@ $redirectTests = @(
     @{redirectType = 'relative'; redirectedMethod = 'GET'}
 )
 
-Describe "Invoke-WebRequest tests" -Tags "Feature" {
+Describe "Invoke-WebRequest tests" -Tags "Feature", "RequireAdminOnWindows" {
     BeforeAll {
         $WebListener = Start-WebListener
     }
@@ -480,6 +480,30 @@ Describe "Invoke-WebRequest tests" -Tags "Feature" {
 
         $Result.Output.Encoding.BodyName | Should -Be 'utf-8'
         $Result.Output.Content | Should -Match '⡌⠁⠧⠑ ⠼⠁⠒  ⡍⠜⠇⠑⠹⠰⠎ ⡣⠕⠌'
+    }
+
+    It "Invoke-WebRequest supports sending request as UTF-8." {
+        $uri = Get-WebListenerUrl -Test 'POST'
+        # Body must contain non-ASCII characters
+        $command = "Invoke-WebRequest -Uri '$uri' -Body 'проверка' -ContentType 'application/json; charset=utf-8' -Method 'POST'"
+
+        $result = ExecuteWebCommand -command $command
+        ValidateResponse -response $result
+
+        $Result.Output.Encoding.BodyName | Should -BeExactly 'utf-8'
+        $object = $Result.Output.Content | ConvertFrom-Json
+        $object.Data | Should -BeExactly 'проверка'
+    }
+
+    It "Invoke-WebRequest supports request that returns page containing CodPage 936 data." {
+        $uri = Get-WebListenerUrl -Test 'Encoding' -TestValue 'CP936'
+        $command = "Invoke-WebRequest -Uri '$uri'"
+
+        $result = ExecuteWebCommand -command $command
+        ValidateResponse -response $result
+
+        $Result.Output.Encoding.CodePage | Should -Be 936
+        $Result.Output.Content | Should -Match '测试123'
     }
 
     It "Invoke-WebRequest validate timeout option" {
@@ -737,6 +761,23 @@ Describe "Invoke-WebRequest tests" -Tags "Feature" {
         $result.Output.RelationLink["last"] | Should -BeExactly "${baseUri}?maxlinks=3&linknumber=3&type=${type}"
         $result.Output.RelationLink["first"] | Should -BeExactly "${baseUri}?maxlinks=3&linknumber=1&type=${type}"
         $result.Output.RelationLink["self"] | Should -BeExactly "${baseUri}?maxlinks=3&linknumber=1&type=${type}"
+    }
+
+    It "Validate Invoke-WebRequest handles different whitespace for Link Headers: <type>" -TestCases @(
+        @{ type = "noWhitespace" }
+        @{ type = "extraWhitespace" }
+    ) {
+        param($type)
+        $uri = Get-WebListenerUrl -Test 'Link' -Query @{type = $type}
+        $command = "Invoke-WebRequest -Uri '$uri'"
+        $result = ExecuteWebCommand -command $command
+
+        $result.Output.RelationLink.Count | Should -BeExactly 4
+        $baseUri = Get-WebListenerUrl -Test 'Link'
+        $result.Output.RelationLink["last"] | Should -BeExactly "${baseUri}?maxlinks=3&linknumber=3&type=${type}"
+        $result.Output.RelationLink["first"] | Should -BeExactly "${baseUri}?maxlinks=3&linknumber=1&type=${type}"
+        $result.Output.RelationLink["self"] | Should -BeExactly "${baseUri}?maxlinks=3&linknumber=1&type=${type}"
+        $result.Output.RelationLink["next"] | Should -BeExactly "${baseUri}?maxlinks=3&linknumber=2&type=${type}"
     }
 
     #region Redirect tests
@@ -1152,6 +1193,28 @@ Describe "Invoke-WebRequest tests" -Tags "Feature" {
         $result.Output.Headers.'X-Fake-Header'.Contains('testvalue02') | Should -BeTrue
         $result.Output.RawContent | Should -Match ([regex]::Escape('X-Fake-Header: testvalue01'))
         $result.Output.RawContent | Should -Match ([regex]::Escape('X-Fake-Header: testvalue02'))
+    }
+
+    It "Verifies Invoke-WebRequest does not sent expect 100-continue headers by default" {
+        $uri = Get-WebListenerUrl -Test 'Get'
+
+        $response = Invoke-WebRequest -Uri $uri
+        $result = $response.Content | ConvertFrom-Json
+
+        $result.headers.Expect | Should -BeNullOrEmpty
+        $result.method | Should -BeExactly "GET"
+        $result.url | Should -BeExactly $uri.ToString()
+    }
+
+    It "Verifies Invoke-WebRequest sends expect 100-continue header when defined in -Headers" {
+        $uri = Get-WebListenerUrl -Test 'Get'
+
+        $response = Invoke-WebRequest -Uri $uri -Headers @{Expect = '100-continue'}
+        $result = $response.Content | ConvertFrom-Json
+
+        $result.headers.Expect | Should -BeExactly '100-continue'
+        $result.method | Should -BeExactly "GET"
+        $result.url | Should -BeExactly $uri.ToString()
     }
 
     #endregion Content Header Inclusion
@@ -1723,9 +1786,52 @@ Describe "Invoke-WebRequest tests" -Tags "Feature" {
             $response.Headers.'Content-Range'[0] | Should -BeExactly "bytes */$referenceFileSize"
         }
     }
+
+    Context "Invoke-WebRequest retry tests" {
+
+        It "Invoke-WebRequest can retry - <Name>" -TestCases @(
+            @{Name = "specified number of times - error 304"; failureCount = 2; failureCode = 304; retryCount = 2}
+            @{Name = "specified number of times - error 400"; failureCount = 3; failureCode = 400; retryCount = 3}
+            @{Name = "specified number of times - error 599"; failureCount = 1; failureCode = 599; retryCount = 2}
+            @{Name = "specified number of times - error 404"; failureCount = 2; failureCode = 404; retryCount = 2}
+            @{Name = "when retry count is higher than failure count"; failureCount = 2; failureCode = 404; retryCount = 4}
+        ) {
+            param($failureCount, $retryCount, $failureCode)
+
+            $uri = Get-WebListenerUrl -Test 'Retry' -Query @{ sessionid = (New-Guid).Guid; failureCode = $failureCode; failureCount = $failureCount }
+            $commandStr = "Invoke-WebRequest -Uri '$uri' -MaximumRetryCount $retryCount -RetryIntervalSec 1"
+            $result = ExecuteWebCommand -command $commandStr
+
+            $result.output.StatusCode | Should -Be "200"
+            $jsonResult = $result.output.Content | ConvertFrom-Json
+            $jsonResult.failureResponsesSent | Should -Be $failureCount
+        }
+
+        It "Invoke-WebRequest should fail when failureCount is greater than MaximumRetryCount" {
+
+            $uri = Get-WebListenerUrl -Test 'Retry' -Query @{ sessionid = (New-Guid).Guid; failureCode = 400; failureCount = 4 }
+            $command = "Invoke-WebRequest -Uri '$uri' -MaximumRetryCount 1 -RetryIntervalSec 1"
+            $result = ExecuteWebCommand -command $command
+            $jsonError = $result.error | ConvertFrom-Json
+            $jsonError.error | Should -BeExactly 'Error: HTTP - 400 occurred.'
+        }
+
+        It "Invoke-WebRequest can retry with POST" {
+
+            $uri = Get-WebListenerUrl -Test 'Retry'
+            $sessionId = (New-Guid).Guid
+            $body = @{ sessionid = $sessionId; failureCode = 404; failureCount = 1 }
+            $commandStr = "Invoke-WebRequest -Uri '$uri' -MaximumRetryCount 2 -RetryIntervalSec 1 -Method POST -Body `$body"
+            $result = ExecuteWebCommand -command $commandStr
+
+            $result.output.StatusCode | Should -Be "200"
+            $jsonResult = $result.output.Content | ConvertFrom-Json
+            $jsonResult.SessionId | Should -BeExactly $sessionId
+        }
+    }
 }
 
-Describe "Invoke-RestMethod tests" -Tags "Feature" {
+Describe "Invoke-RestMethod tests" -Tags "Feature", "RequireAdminOnWindows" {
     BeforeAll {
         $WebListener = Start-WebListener
     }
@@ -1807,6 +1913,23 @@ Describe "Invoke-RestMethod tests" -Tags "Feature" {
 
         $result = ExecuteWebCommand -command $command
         $Result.Output | Should -Match '⡌⠁⠧⠑ ⠼⠁⠒  ⡍⠜⠇⠑⠹⠰⠎ ⡣⠕⠌'
+    }
+
+    It "Invoke-RestMethod supports sending requests as UTF8" {
+        $uri = Get-WebListenerUrl -Test POST
+        # Body must contain non-ASCII characters
+        $command = "Invoke-RestMethod -Uri '$uri' -body 'проверка' -ContentType 'application/json; charset=utf-8' -method 'POST'"
+
+        $result = ExecuteWebCommand -command $command
+        $Result.Output.Data | Should -BeExactly 'проверка'
+    }
+
+    It "Invoke-RestMethod supports request that returns page containing Code Page 936 data." {
+        $uri = Get-WebListenerUrl -Test 'Encoding' -TestValue 'CP936'
+        $command = "Invoke-RestMethod -Uri '$uri'"
+
+        $result = ExecuteWebCommand -command $command
+        $Result.Output | Should -Match '测试123'
     }
 
     It "Invoke-RestMethod validate timeout option" {
@@ -2027,6 +2150,17 @@ Describe "Invoke-RestMethod tests" -Tags "Feature" {
         $command = "Invoke-RestMethod -Uri '$uri' -FollowRelLink"
         $result = ExecuteWebCommand -command $command
         $result.Output.linknumber | Should -BeExactly 1
+    }
+
+    It "Validate Invoke-RestMethod handles whitespace for Link Headers if -FollowRelLink is specified: <type>" -TestCases @(
+        @{ type = "noWhitespace" }
+        @{ type = "extraWhitespace" }
+    ) {
+        param($type)
+        $uri = Get-WebListenerUrl -Test 'Link' -Query @{type = $type}
+        $command = "Invoke-RestMethod -Uri '$uri' -FollowRelLink"
+        $result = ExecuteWebCommand -command $command
+        1..3 | ForEach-Object { $result.Output[$_ - 1].linknumber | Should -BeExactly $_ }
     }
 
     #region Redirect tests
@@ -2436,6 +2570,26 @@ Describe "Invoke-RestMethod tests" -Tags "Feature" {
             {Invoke-RestMethod -Uri $uri -Form $form -InFile $file1Path -ErrorAction 'Stop'} |
                 Should -Throw -ErrorId 'WebCmdletFormInFileConflictException,Microsoft.PowerShell.Commands.InvokeRestMethodCommand'
         }
+    }
+
+    It "Verifies Invoke-RestMethod does not sent expect 100-continue headers by default" {
+        $uri = Get-WebListenerUrl -Test 'Get'
+
+        $result = Invoke-RestMethod -Uri $uri
+
+        $result.headers.Expect | Should -BeNullOrEmpty
+        $result.method | Should -BeExactly "GET"
+        $result.url | Should -BeExactly $uri.ToString()
+    }
+
+    It "Verifies Invoke-RestMethod sends expect 100-continue header when defined in -Headers" {
+        $uri = Get-WebListenerUrl -Test 'Get'
+
+        $result = Invoke-RestMethod -Uri $uri -Headers @{Expect = '100-continue'}
+
+        $result.headers.Expect | Should -BeExactly '100-continue'
+        $result.method | Should -BeExactly "GET"
+        $result.url | Should -BeExactly $uri.ToString()
     }
 
     #region charset encoding tests
@@ -2969,9 +3123,36 @@ Describe "Invoke-RestMethod tests" -Tags "Feature" {
             $Headers.'Content-Range'[0] | Should -BeExactly "bytes */$referenceFileSize"
         }
     }
+
+    Context "Invoke-RestMethod retry tests" {
+
+        It "Invoke-RestMethod can retry - specified number of times - error 304" {
+
+            $uri = Get-WebListenerUrl -Test 'Retry'
+            $sessionId = (New-Guid).Guid
+            $body = @{ sessionid = $sessionId; failureCode = 304; failureCount = 2 }
+            $commandStr = "Invoke-RestMethod -Uri '$uri' -MaximumRetryCount 2 -RetryIntervalSec 1 -Method POST -Body `$body"
+            $result = ExecuteWebCommand -command $commandStr
+
+            $result.output.failureResponsesSent | Should -Be 2
+            $result.output.sessionId | Should -BeExactly $sessionId
+        }
+
+        It "Invoke-RestMethod can retry with POST" {
+
+            $uri = Get-WebListenerUrl -Test 'Retry'
+            $sessionId = (New-Guid).Guid
+            $body = @{ sessionid = $sessionId; failureCode = 404; failureCount = 1 }
+            $commandStr = "Invoke-RestMethod -Uri '$uri' -MaximumRetryCount 2 -RetryIntervalSec 1 -Method POST -Body `$body"
+            $result = ExecuteWebCommand -command $commandStr
+
+            $result.output.failureResponsesSent | Should -Be 1
+            $result.output.sessionId | Should -BeExactly $sessionId
+        }
+    }
 }
 
-Describe "Validate Invoke-WebRequest and Invoke-RestMethod -InFile" -Tags "Feature" {
+Describe "Validate Invoke-WebRequest and Invoke-RestMethod -InFile" -Tags "Feature", "RequireAdminOnWindows" {
     BeforeAll {
         $WebListener = Start-WebListener
     }
@@ -3051,7 +3232,7 @@ Describe "Validate Invoke-WebRequest and Invoke-RestMethod -InFile" -Tags "Featu
     }
 }
 
-Describe "Web cmdlets tests using the cmdlet's aliases" -Tags "CI" {
+Describe "Web cmdlets tests using the cmdlet's aliases" -Tags "CI", "RequireAdminOnWindows" {
     BeforeAll {
         $WebListener = Start-WebListener
     }
@@ -3062,7 +3243,7 @@ Describe "Web cmdlets tests using the cmdlet's aliases" -Tags "CI" {
             contenttype = 'text/plain'
         }
         $uri = Get-WebListenerUrl -Test 'Response' -Query $query
-        $result = iwr $uri
+        $result = Invoke-WebRequest $uri
         $result.StatusCode | Should -Be "200"
         $result.Content | Should -Be "hello"
     }
@@ -3073,7 +3254,8 @@ Describe "Web cmdlets tests using the cmdlet's aliases" -Tags "CI" {
             body        = @{Hello = "world"} | ConvertTo-Json -Compress
         }
         $uri = Get-WebListenerUrl -Test 'Response' -Query $query
-        $result = irm $uri
+        $result = Invoke-RestMethod $uri
         $result.Hello | Should -Be "world"
     }
 }
+
